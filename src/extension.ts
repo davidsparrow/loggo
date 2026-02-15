@@ -6,17 +6,24 @@
  */
 
 import * as vscode from 'vscode';
+import { CodemapViewProvider } from './webview/CodemapViewProvider';
+import { TypeScriptAnalyzer } from './analyzer/TypeScriptAnalyzer';
+import { DependencyExtractor } from './analyzer/DependencyExtractor';
 
 // ── Activate ──────────────────────────────────────────────
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('[LogoCode] Extension activating…');
 
+  // ── Core instances ──
+  const canvasProvider = new CodemapViewProvider(context.extensionUri);
+  const analyzer = new TypeScriptAnalyzer();
+  const extractor = new DependencyExtractor();
+
   // --- Open Graph Canvas command (editor-area WebviewPanel) ---
   context.subscriptions.push(
     vscode.commands.registerCommand('logocode.openCanvas', () => {
-      // TODO (Chunk 2): Implement CodemapViewProvider + WebviewPanel
-      vscode.window.showInformationMessage('LogoCode: Graph Canvas — coming in Chunk 2');
+      canvasProvider.show();
     })
   );
 
@@ -28,8 +35,21 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showWarningMessage('Open a workspace first.');
         return;
       }
-      // TODO (Chunk 2): Run analyzer + update graph
-      vscode.window.showInformationMessage('LogoCode: Refresh — coming in Chunk 2');
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'LogoCode: Analysing…', cancellable: false },
+        async () => {
+          try {
+            const result = await analyzer.analyzeWorkspace(workspacePath);
+            const graphData = await extractor.extractGraphData(analyzer, result);
+            canvasProvider.updateGraph(graphData);
+            vscode.window.showInformationMessage(
+              `LogoCode: ${graphData.nodes.length} nodes, ${graphData.edges.length} edges`
+            );
+          } catch (e) {
+            vscode.window.showErrorMessage(`LogoCode analysis failed: ${e}`);
+          }
+        }
+      );
     })
   );
 
