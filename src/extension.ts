@@ -6,7 +6,12 @@
  */
 
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { CodemapViewProvider } from './webview/CodemapViewProvider';
+import { FilesViewProvider } from './webview/FilesViewProvider';
+import { ChatViewProvider } from './webview/ChatViewProvider';
+import { SearchViewProvider } from './webview/SearchViewProvider';
+import { SavedViewProvider } from './webview/SavedViewProvider';
 import { TypeScriptAnalyzer } from './analyzer/TypeScriptAnalyzer';
 import { DependencyExtractor } from './analyzer/DependencyExtractor';
 
@@ -17,8 +22,20 @@ export function activate(context: vscode.ExtensionContext) {
 
   // ── Core instances ──
   const canvasProvider = new CodemapViewProvider(context.extensionUri);
+  const filesProvider = new FilesViewProvider(context.extensionUri);
+  const chatProvider = new ChatViewProvider(context.extensionUri);
+  const searchProvider = new SearchViewProvider(context.extensionUri);
+  const savedProvider = new SavedViewProvider(context.extensionUri);
   const analyzer = new TypeScriptAnalyzer();
   const extractor = new DependencyExtractor();
+
+  // ── Register sidebar webview providers ──
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(FilesViewProvider.viewType, filesProvider),
+    vscode.window.registerWebviewViewProvider(ChatViewProvider.viewType, chatProvider),
+    vscode.window.registerWebviewViewProvider(SearchViewProvider.viewType, searchProvider),
+    vscode.window.registerWebviewViewProvider(SavedViewProvider.viewType, savedProvider),
+  );
 
   // --- Open Graph Canvas command (editor-area WebviewPanel) ---
   context.subscriptions.push(
@@ -42,6 +59,15 @@ export function activate(context: vscode.ExtensionContext) {
             const result = await analyzer.analyzeWorkspace(workspacePath);
             const graphData = await extractor.extractGraphData(analyzer, result);
             canvasProvider.updateGraph(graphData);
+
+            // Populate Files panel
+            const files = result.files.map(f => ({
+              path: f.path,
+              name: path.basename(f.path),
+              dir: path.relative(workspacePath, path.dirname(f.path)) || '.',
+            }));
+            filesProvider.setFiles(files);
+
             vscode.window.showInformationMessage(
               `LogoCode: ${graphData.nodes.length} nodes, ${graphData.edges.length} edges`
             );
@@ -62,8 +88,9 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showWarningMessage('Select text first.');
         return;
       }
-      // TODO (Chunk 4): Trigger text search with `selected`
-      vscode.window.showInformationMessage(`Text search: "${selected}" — coming in Chunk 4`);
+      searchProvider.setMode('text');
+      searchProvider.setQuery(selected);
+      // TODO (Chunk 4): auto-execute text search
     })
   );
 
@@ -76,8 +103,9 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showWarningMessage('Select text first.');
         return;
       }
-      // TODO (Chunk 4): Trigger semantic search with `selected`
-      vscode.window.showInformationMessage(`Semantic search: "${selected}" — coming in Chunk 4`);
+      searchProvider.setMode('semantic');
+      searchProvider.setQuery(selected);
+      // TODO (Chunk 4): auto-execute semantic search
     })
   );
 
@@ -95,8 +123,50 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  // ── Panel callbacks ──
+
+  // Search → result click opens file
+  searchProvider.onResultClick = (result) => {
+    const uri = vscode.Uri.file(result.filePath);
+    vscode.workspace.openTextDocument(uri).then((doc) => {
+      const opts: vscode.TextDocumentShowOptions = { viewColumn: vscode.ViewColumn.One };
+      if (result.line) {
+        const pos = new vscode.Position(result.line - 1, result.column ? result.column - 1 : 0);
+        opts.selection = new vscode.Range(pos, pos);
+      }
+      vscode.window.showTextDocument(doc, opts);
+    });
+  };
+
+  // Search → add result to agent context
+  searchProvider.onAddToAgent = (result) => {
+    chatProvider.addContext({
+      id: `search-${Date.now()}`,
+      filePath: result.filePath,
+      line: result.line,
+      snippet: result.preview,
+      source: 'search',
+      addedAt: Date.now(),
+    });
+    vscode.window.showInformationMessage(`Added to agent context: ${result.fileName}`);
+  };
+
+  // Search execution placeholder (actual implementation in Chunk 4)
+  searchProvider.onSearch = (mode, query, _opts) => {
+    vscode.window.showInformationMessage(`Search (${mode}): "${query}" — full implementation in Chunk 4`);
+  };
+
+  // Saved → execute preset (switches to search, restores params, runs)
+  savedProvider.onExecutePreset = (preset) => {
+    searchProvider.setMode(preset.mode);
+    const query = preset.textOptions?.query || preset.semanticOptions?.query || '';
+    searchProvider.setQuery(query);
+    // TODO (Chunk 4): auto-execute the restored search
+    vscode.window.showInformationMessage(`Running preset: ${preset.name}`);
+  };
+
   // --- Language Model Tool registration ---
-  // TODO (Chunk 2+): Register CodemapTool with vscode.lm.registerTool
+  // TODO: Register CodemapTool with vscode.lm.registerTool
 
   console.log('[LogoCode] Extension activated ✓');
 }
