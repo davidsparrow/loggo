@@ -14,6 +14,9 @@ import { SearchViewProvider } from './webview/SearchViewProvider';
 import { SavedViewProvider } from './webview/SavedViewProvider';
 import { TypeScriptAnalyzer } from './analyzer/TypeScriptAnalyzer';
 import { DependencyExtractor } from './analyzer/DependencyExtractor';
+import { TextSearchService } from './services/TextSearchService';
+import { SemanticSearchService } from './services/SemanticSearchService';
+import { SearchMode } from './types/search';
 
 // ── Activate ──────────────────────────────────────────────
 
@@ -28,6 +31,40 @@ export function activate(context: vscode.ExtensionContext) {
   const savedProvider = new SavedViewProvider(context.extensionUri);
   const analyzer = new TypeScriptAnalyzer();
   const extractor = new DependencyExtractor();
+  const textSearch = new TextSearchService();
+  const semanticSearch = new SemanticSearchService(textSearch);
+
+  // Try to initialise semantic engine (non-blocking)
+  semanticSearch.initialize().then((ok) => {
+    if (ok) { console.log('[LogoCode] Semantic engine online'); }
+  });
+
+  // ── Shared search executor ──
+  async function executeSearch(mode: SearchMode, query: string, opts: Record<string, unknown>) {
+    if (!query) { return; }
+    if (mode === 'text') {
+      const results = await textSearch.search({
+        query,
+        isRegex: (opts.isRegex as boolean) || false,
+        isCaseSensitive: (opts.isCaseSensitive as boolean) || false,
+        isWholeWord: (opts.isWholeWord as boolean) || false,
+        includeGlob: opts.includeGlob as string | undefined,
+        excludeGlob: opts.excludeGlob as string | undefined,
+      });
+      searchProvider.setResults(results);
+    } else {
+      // Semantic mode — with fallback (Snippet 13)
+      const { results, didFallback } = await semanticSearch.search({
+        query,
+        includeExternalFolders: (opts.includeExternalFolders as boolean) || false,
+        topK: 20,
+      });
+      searchProvider.setResults(results);
+      if (didFallback) {
+        vscode.window.showInformationMessage('Semantic search unavailable — using text search.');
+      }
+    }
+  }
 
   // ── Register sidebar webview providers ──
   context.subscriptions.push(
@@ -90,7 +127,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
       searchProvider.setMode('text');
       searchProvider.setQuery(selected);
-      // TODO (Chunk 4): auto-execute text search
+      executeSearch('text', selected, {});
     })
   );
 
@@ -105,7 +142,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
       searchProvider.setMode('semantic');
       searchProvider.setQuery(selected);
-      // TODO (Chunk 4): auto-execute semantic search
+      executeSearch('semantic', selected, {});
     })
   );
 
@@ -151,18 +188,20 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.showInformationMessage(`Added to agent context: ${result.fileName}`);
   };
 
-  // Search execution placeholder (actual implementation in Chunk 4)
-  searchProvider.onSearch = (mode, query, _opts) => {
-    vscode.window.showInformationMessage(`Search (${mode}): "${query}" — full implementation in Chunk 4`);
+  // Search execution — wired to TextSearchService + SemanticSearchService
+  searchProvider.onSearch = (mode, query, opts) => {
+    executeSearch(mode, query, opts);
   };
 
-  // Saved → execute preset (switches to search, restores params, runs)
+  // Saved → execute preset (switches to search, restores params, auto-executes)
   savedProvider.onExecutePreset = (preset) => {
     searchProvider.setMode(preset.mode);
     const query = preset.textOptions?.query || preset.semanticOptions?.query || '';
     searchProvider.setQuery(query);
-    // TODO (Chunk 4): auto-execute the restored search
-    vscode.window.showInformationMessage(`Running preset: ${preset.name}`);
+    const opts = preset.mode === 'text'
+      ? { ...(preset.textOptions || {}) }
+      : { ...(preset.semanticOptions || {}) };
+    executeSearch(preset.mode, query, opts);
   };
 
   // --- Language Model Tool registration ---
