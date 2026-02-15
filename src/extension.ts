@@ -17,6 +17,7 @@ import { DependencyExtractor } from './analyzer/DependencyExtractor';
 import { TextSearchService } from './services/TextSearchService';
 import { SemanticSearchService } from './services/SemanticSearchService';
 import { AgentService } from './services/AgentService';
+import { DiffViewProvider } from './webview/DiffViewProvider';
 import { SearchMode } from './types/search';
 
 // ── Activate ──────────────────────────────────────────────
@@ -35,6 +36,7 @@ export function activate(context: vscode.ExtensionContext) {
   const textSearch = new TextSearchService();
   const semanticSearch = new SemanticSearchService(textSearch);
   const agentService = new AgentService();
+  const diffViewProvider = new DiffViewProvider(context.extensionUri);
 
   // Try to initialise semantic engine (non-blocking)
   semanticSearch.initialize().then((ok) => {
@@ -243,11 +245,12 @@ export function activate(context: vscode.ExtensionContext) {
         timestamp: Date.now(),
       });
     },
-    onDiffResult: (_result) => {
+    onDiffResult: (result) => {
+      diffViewProvider.show(result);
       chatProvider.addMessage({
         id: `diff-${Date.now()}`,
         role: 'agent',
-        content: 'Diff computed. Review files and click "Apply Selected" when ready.',
+        content: 'Diff computed. Review files in the Diff View and click "Apply Selected" when ready.',
         timestamp: Date.now(),
       });
     },
@@ -279,6 +282,45 @@ export function activate(context: vscode.ExtensionContext) {
         return { nodes: [], edges: [] };
       }
     },
+  };
+
+  // ── Diff View callbacks ──
+
+  diffViewProvider.onApplySelected = () => {
+    agentService.applyChanges();
+  };
+
+  diffViewProvider.onBackToPlan = () => {
+    agentService.reset();
+    diffViewProvider.dispose();
+    chatProvider.addMessage({
+      id: `back-${Date.now()}`, role: 'system',
+      content: 'Returned to plan view. Agent reset.', timestamp: Date.now(),
+    });
+  };
+
+  diffViewProvider.onToggleAccept = (filePath: string) => {
+    const dm = agentService.diffMeta;
+    if (dm) {
+      agentService.applyService.toggleAccept(dm, filePath);
+      diffViewProvider.updateDiffMeta();
+    }
+  };
+
+  diffViewProvider.onAcceptAllTouched = () => {
+    const dm = agentService.diffMeta;
+    if (dm) {
+      agentService.applyService.acceptAllTouched(dm);
+      diffViewProvider.updateDiffMeta();
+    }
+  };
+
+  diffViewProvider.onAcceptNone = () => {
+    const dm = agentService.diffMeta;
+    if (dm) {
+      agentService.applyService.acceptNone(dm);
+      diffViewProvider.updateDiffMeta();
+    }
   };
 
   // ── Chat → Agent flow ──
