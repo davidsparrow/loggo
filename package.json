@@ -1,0 +1,132 @@
+{
+  "name": "logocode",
+  "displayName": "LogoCode",
+  "description": "Intelligent Visual Agent Workspace – code exploration, search, planning, and controlled change application",
+  "version": "0.1.0",
+  "publisher": "logocode",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:logocode-files",
+    "onView:logocode-graph"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "logocode-sidebar",
+          "title": "LogoCode",
+          "icon": "$(circuit-board)"
+        }
+      ]
+    },
+    "views": {
+      "logocode-sidebar": [
+        {
+          "id": "logocode-files",
+          "name": "Files",
+          "type": "webview"
+        },
+        {
+          "id": "logocode-chat",
+          "name": "Chat",
+          "type": "webview"
+        },
+        {
+          "id": "logocode-search",
+          "name": "Search",
+          "type": "webview"
+        },
+        {
+          "id": "logocode-saved",
+          "name": "Saved",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "logocode.openCanvas",
+        "title": "LogoCode: Open Graph Canvas",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "logocode.refresh",
+        "title": "LogoCode: Refresh Analysis"
+      },
+      {
+        "command": "logocode.searchFromSelection.text",
+        "title": "Search in Workspace (Text)"
+      },
+      {
+        "command": "logocode.searchFromSelection.semantic",
+        "title": "Search Semantically"
+      },
+      {
+        "command": "logocode.askAgent",
+        "title": "Ask Agent About This"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "logocode.searchFromSelection.text",
+          "group": "logocode@1"
+        },
+        {
+          "command": "logocode.searchFromSelection.semantic",
+          "group": "logocode@2"
+        },
+        {
+          "command": "logocode.askAgent",
+          "group": "logocode@3"
+        }
+      ]
+    },
+    "languageModelTools": [
+      {
+        "name": "codemap_analyze",
+        "tags": [
+          "code-visualization",
+          "dependency-analysis",
+          "code-map"
+        ],
+        "displayName": "Code Map Analyzer",
+        "modelDescription": "Analyzes code structure and dependencies, visualizing them as an interactive graph.",
+        "canBeReferencedInPrompt": true,
+        "userDescription": "Visualize code structure and dependencies",
+        "icon": "$(graph)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "workspacePath": { "type": "string" },
+            "filePattern": { "type": "string" },
+            "targetFile": { "type": "string" },
+            "relatedFiles": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "typescript": "^5.3.3"
+  }
+}
+

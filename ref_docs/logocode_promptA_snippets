@@ -1,0 +1,229 @@
+🔧 FINAL CODE SNIPPETS INDEX
+
+(Organized by Master Prompt Section)
+
+🟢 SECTION F
+GRAPH CANVAS – CARD-BASED NODE RENDERER
+Purpose
+
+Upgrade existing circle-based D3 nodes into card-based nodes without rewriting renderer.
+
+1️⃣ Card Dimension Helper
+function cardDims(d) {
+  const t = String(d.type);
+  const isFile = t === 'file';
+  return { 
+    w: isFile ? 220 : 200, 
+    h: isFile ? 64 : 54 
+  };
+}
+
+2️⃣ Stable DOM Identity (Required for Diff + Hover Sync)
+nodeEnter
+  .attr('data-id', d => d.id)
+  .attr('data-status', d => d.metadata?.diffStatus || '');
+
+
+For edges:
+
+linkEnter
+  .attr('data-id', d => d.id || edgeKey(d));
+
+3️⃣ Card Structure (Drop-In Node Upgrade)
+
+Replace circle + text block with:
+
+const card = nodeEnter.append('g').attr('class', 'card');
+
+card.append('rect').attr('class', 'card-bg');
+card.append('rect').attr('class', 'card-border');
+
+const badges = card.append('g').attr('class', 'badges');
+badges.append('g').attr('class', 'badge badge-status');
+badges.append('g').attr('class', 'badge badge-type');
+badges.append('g').attr('class', 'badge badge-comments');
+
+const content = card.append('g').attr('class', 'content');
+content.append('text').attr('class', 'title');
+content.append('text').attr('class', 'subtitle');
+
+const actions = card.append('g').attr('class', 'actions');
+actions.append('g').attr('class', 'btn btn-accept');
+actions.append('g').attr('class', 'btn btn-patch');
+actions.append('g').attr('class', 'btn btn-open');
+
+4️⃣ Force Collision Radius for Cards
+simulation.force('collision', 
+  d3.forceCollide().radius(d => {
+    const { w, h } = cardDims(d);
+    return Math.sqrt((w*w + h*h)) / 2 + 8;
+  })
+);
+
+🟢 SECTION H
+DIFF VIEW – STABLE EDGE MATCHING
+Purpose
+
+Make edge diff matching deterministic.
+
+5️⃣ Update D3Link Interface
+export interface D3Link {
+  id: string;
+  source: string;
+  target: string;
+  type: string;
+  label?: string;
+  value?: number;
+}
+
+6️⃣ Stable Edge ID in Transformer
+function transformLink(edge: GraphEdge): D3Link {
+  return {
+    id: edge.id || makeEdgeKey(edge),
+    source: String(edge.source),
+    target: String(edge.target),
+    type: String(edge.type),
+    label: edge.label,
+    value: getEdgeValue(edge.type),
+  };
+}
+
+
+Helper:
+
+function makeEdgeKey(edge: GraphEdge): string {
+  const label = edge.label ? `:${edge.label}` : '';
+  return `${edge.type}:${edge.source}->${edge.target}${label}`;
+}
+
+🟢 SECTION I
+DIFF VIEW UX POLISH – LOCK PAN / HOVER SYNC / CENTER
+7️⃣ Zoom Sync Guard
+let isSyncing = false;
+
+function syncZoom(sourceZoom, targetSvg, targetZoom, transform) {
+  if (isSyncing) return;
+  isSyncing = true;
+  targetSvg.call(targetZoom.transform, transform);
+  isSyncing = false;
+}
+
+8️⃣ Hover Sync State
+let hoverState = null;
+
+function applyHoverState(panel) {
+  panel.selectAll('.node')
+    .classed('is-highlight', d => hoverState?.id === d.id)
+    .classed('is-dim', d => hoverState && hoverState.id !== d.id);
+}
+
+9️⃣ Center on Selection
+function centerOnNode(svg, zoomBehavior, node, width, height, currentK) {
+  const desiredX = (width / 2) - (node.x * currentK);
+  const desiredY = (height / 2) - (node.y * currentK);
+
+  const newTransform = d3.zoomIdentity
+    .translate(desiredX, desiredY)
+    .scale(currentK);
+
+  svg.transition().duration(250)
+     .call(zoomBehavior.transform, newTransform);
+}
+
+🟢 SECTION G
+AGENT WORKFLOW – PLAN → DIFF → APPLY
+🔟 File-Level Accept Toggle (Diff Mode)
+nodeSelection.select('.btn-accept').on('click', (event, d) => {
+  event.stopPropagation();
+  vscode.postMessage({
+    type: 'diff:toggleAccept',
+    fileNodeId: d.id
+  });
+});
+
+11️⃣ Apply Edits Atomically
+const edit = new vscode.WorkspaceEdit();
+
+edit.replace(
+  vscode.Uri.file(filePath),
+  new vscode.Range(0, 0, doc.lineCount, 0),
+  newContent
+);
+
+await vscode.workspace.applyEdit(edit);
+
+🟢 SECTION L
+SEMANTIC SEARCH – RUVECTOR INTEGRATION
+12️⃣ Chat-Triggered Semantic Search
+if (message.text.includes("use ruvector")) {
+  panelState.mode = "semantic";
+  runSemanticSearch(extractedQuery);
+}
+
+13️⃣ Fallback to Text Search
+try {
+  await semanticSearch(query);
+} catch (e) {
+  showBanner("Semantic search unavailable. Using text search.");
+  runTextSearch(query);
+}
+
+🟢 SECTION M
+MICRO-INTERACTIONS
+14️⃣ Editor Selection → Semantic Search
+const editor = vscode.window.activeTextEditor;
+const selected = editor?.document.getText(editor.selection);
+
+vscode.commands.executeCommand(
+  'codemap.searchFromSelection.semantic',
+  selected
+);
+
+15️⃣ Add Result to Agent Context
+vscode.postMessage({
+  type: 'agent:addContext',
+  filePath: result.filePath,
+  line: result.line,
+  snippet: result.preview
+});
+
+🟢 SECTION N
+CENTRAL STATE MODEL
+16️⃣ Recommended State Shape
+{
+  mode: "text" | "semantic",
+  results: [],
+  agentContext: [],
+  diffMeta: {},
+  acceptedByFileId: {},
+  hoverState: null,
+  selectionState: null,
+  mcpServers: [],
+  connectors: [],
+  externalFolders: []
+}
+
+🟢 SECTION H
+DIFF META STRUCTURE
+17️⃣ DiffMeta Contract
+type DiffMeta = {
+  nodeStatusById: Record<string, 'touched'|'added'|'removed'|'changed'|'context'|'unchanged'>;
+  edgeStatusByKey: Record<string, 'added'|'removed'|'unchanged'>;
+  acceptedByFileId: Record<string, boolean>;
+};
+
+🎯 Why This Matters
+
+These snippets are:
+
+Minimal changes
+
+Production-safe
+
+Diff-stable
+
+Reusable in Monaco
+
+Reusable in Rust core later
+
+Compatible with your existing D3 renderer

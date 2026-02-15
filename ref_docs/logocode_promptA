@@ -1,0 +1,418 @@
+Excellent. Below is your **fully assembled Master Cursor Build Prompt** — clean, structured, production-oriented, and aligned with everything we designed.
+
+You can paste this directly into Cursor.
+
+---
+
+# 🚀 MASTER BUILD PROMPT
+
+# Intelligent Visual Agent Workspace – VS Code Extension (Phase A)
+
+---
+
+## A) PROJECT OVERVIEW – VS CODE EXTENSION (PHASE A)
+
+Build a production-ready VS Code extension that provides a simplified, visual, agent-powered workspace for code exploration, search, planning, and controlled application of changes.
+
+This extension must:
+
+* Wrap VS Code capabilities (not replace them).
+* Use VS Code APIs for file access, text search, workspace edits.
+* Provide a visual D3-based graph canvas.
+* Provide agent-driven Plan → Diff → Apply workflow.
+* Integrate semantic search using RuVector.
+* Support MCP server control panel.
+* Support external connector management panel.
+* Be modular and extensible for:
+
+  * Phase B: Monaco standalone deployment
+  * Phase C: Rust core engine (optional future)
+
+Architecture must cleanly separate:
+
+* Extension Host (TypeScript logic)
+* Webview UI (D3 canvas, panels)
+* Search services (Text + Semantic)
+* Agent orchestration
+* Diff computation engine
+
+---
+
+## B) PANEL LAYOUT – FILES / CHAT / SEARCH / SAVED
+
+The main sidebar UI must include exactly four tabs:
+
+1. Files
+2. Chat
+3. Search
+4. Saved
+
+No duplicate search panels.
+No separate semantic tab.
+Keep cognitive load minimal.
+
+---
+
+## C) UNIFIED SEARCH TAB (MODE TOGGLE: TEXT | SEMANTIC)
+
+Single Search tab with:
+
+Search Input Field
+
+Mode Toggle:
+( ● Text ) ( ○ Semantic )
+
+If Text Mode:
+
+* Regex toggle
+* Match Case toggle
+* Whole Word toggle
+* Include glob
+* Exclude glob
+* Uses VS Code search API
+
+If Semantic Mode:
+
+* Include External Folders toggle
+* Uses RuVector semantic search engine
+* Results rendered in same result component as Text mode
+
+Results panel is shared across both modes.
+
+---
+
+## D) SAVED SEARCHES (PRESET MANAGER)
+
+Saved tab stores search presets.
+
+Clicking a preset:
+
+* Switches to Search tab
+* Sets mode (Text or Semantic)
+* Restores all saved parameters
+* Executes search automatically
+
+If preset contains manual-only variables:
+
+* Show small alert icon
+* Hover shows required values
+* Clicking icon shows copyable values
+
+Saved tab has persistent filter field for narrowing presets.
+
+---
+
+## E) CHAT PANEL (AGENT + FILE COMMENTS)
+
+Chat panel contains two modes:
+
+1. Agent
+2. File Comments
+
+File comments:
+
+* Any file with comments shows green comment badge
+* Files without comments show grey badge
+* Clicking badge opens correct file comment thread
+* Graph filter: "Has Comments"
+
+Single-user only for MVP.
+
+---
+
+## F) GRAPH CANVAS (CARD-BASED NODE RENDERER)
+
+Use D3.
+
+Nodes are rendered as cards (not circles).
+
+Each node structure:
+
+* Card background
+* Card border
+* Title
+* Subtitle (path or context)
+* Type badge
+* Status badge (diff mode)
+* Comment badge (files only)
+
+Use stable:
+
+* data-id attributes on nodes
+* data-id attributes on edges
+
+Node diff status comes from metadata.diffStatus:
+
+* touched
+* added
+* removed
+* changed
+* context
+* unchanged
+
+Do not rewrite renderer. Extend existing D3 implementation with:
+mode: 'normal' | 'diff'
+
+---
+
+## G) AGENT WORKFLOW – PLAN → DIFF → APPLY
+
+Agent flow:
+
+1. PLAN
+
+   * Agent returns planSteps[]
+   * touchedFiles[]
+   * optional touchedSymbols[]
+   * Show plan UI
+   * “Generate Diff” button
+
+2. DIFF
+
+   * Compute BeforeGraph (current workspace)
+   * Compute AfterGraph (temp-applied patch in memory)
+   * Compute:
+
+     * addedNodes
+     * removedNodes
+     * changedNodes
+     * addedEdges
+     * removedEdges
+   * Build diffMeta maps
+   * Render Diff View
+
+3. APPLY
+
+   * Accept per file (MVP = file-level)
+   * Accept All Touched
+   * Accept All Visible
+   * Apply Selected
+   * Use vscode.workspace.applyEdit
+   * Atomic operation
+   * Offer rollback on failure
+
+---
+
+## H) DIFF VIEW – TWO-PANEL D3 GRAPH COMPARISON
+
+Layout:
+
+Top Bar:
+
+* Lock Pan/Zoom toggle (default ON)
+* Center on Selection
+* Accept All Touched
+* Accept All Visible
+* Accept None
+* Apply Selected
+* Back to Plan
+
+Main:
+Left Panel: BEFORE
+Right Panel: AFTER
+
+Render diff subgraph:
+
+* Touched nodes
+* 1-hop neighbors
+* Connectivity-changed nodes
+* Expand context (optional)
+
+Visual encoding:
+
+* * badge for added
+* – badge for removed
+* Δ badge for changed
+* T badge for touched
+* Added edges dashed
+* Removed edges ghosted
+
+---
+
+## I) DIFF VIEW UX POLISH – LOCK PAN, HOVER SYNC, CENTER
+
+Lock Pan/Zoom:
+
+* Sync zoom transforms across panels
+* Prevent feedback loop with isSyncing flag
+
+Hover Sync:
+
+* Hovering node in one panel highlights same node in other
+* Hovering edge highlights same edge in other
+* Dim non-related nodes (optional)
+
+Center on Selection:
+
+* Centers selected node or edge midpoint
+* Preserves zoom scale
+* If lock ON, applies to both panels
+
+---
+
+## J) MCP SERVER CONTROL PANEL
+
+Canvas header shows:
+
+* MCP server count badge
+
+Hover:
+
+* Shows list of server names + uptime
+
+Click:
+
+* Opens MCP management panel
+* Start/Stop toggles
+* Status indicators
+* Logs
+
+---
+
+## K) EXTERNAL CONNECTOR MANAGEMENT PANEL
+
+Similar UX to MCP.
+
+Supports:
+
+* Gmail
+* Slack
+* Google Sheets
+* Future connectors
+
+Canvas header shows connector count badge.
+
+Connector panel:
+
+* Toggle enable/disable
+* Status
+* Credential storage
+
+---
+
+## L) SEMANTIC SEARCH ENGINE – RUvector INTEGRATION
+
+Implement SemanticSearchService:
+
+Capabilities:
+
+* Index project files
+* Index selected external folders
+* Store folder registry
+* Highlight external folders in File Tree
+* Chat-triggered search
+
+Chat example:
+“Use RuVector to search for initial user flows”
+
+Behavior:
+
+* Switch to Search tab
+* Enable Semantic mode
+* Execute search
+* Show results
+
+If semantic engine unavailable:
+
+* Fallback to text search
+* Show subtle banner
+
+---
+
+## M) MICRO-INTERACTIONS
+
+Editor Selection:
+
+* Right-click:
+
+  * Search in Workspace (Text)
+  * Search Semantically
+  * Ask Agent About This
+
+Canvas Node Toolbar:
+
+* Open
+* Search Related
+* Comment
+* Ask Agent
+
+Search Results:
+
+* Open
+* Add to Agent
+
+Agent context basket:
+
+* Shows context count in Chat header
+* Removable items
+* Included in next agent request
+
+---
+
+## N) CENTRAL PANEL STATE MODEL
+
+Maintain central state:
+
+```
+{
+  mode: "text" | "semantic",
+  results: ResultItem[],
+  agentContext: ContextItem[],
+  diffMeta: DiffMeta,
+  acceptedByFileId: Record<string, boolean>,
+  hoverState: { kind, id } | null,
+  selectionState: { kind, id, sourcePanel } | null,
+  mcpServers: [],
+  connectors: [],
+  externalFolders: []
+}
+```
+
+---
+
+## O) PRODUCTION HARDENING REQUIREMENTS
+
+Must include:
+
+* Error handling for all async operations
+* Debounced search execution
+* Large graph safety limits
+* Guard against runaway force simulation
+* Memory-safe semantic indexing
+* Logging isolation
+* Clear command routing
+* Separation between host and webview logic
+
+---
+
+# FINAL BUILD GOAL
+
+Deliver a clean, minimal, intelligent visual workspace that:
+
+* Feels simpler than VS Code
+* Uses VS Code’s power under the hood
+* Supports advanced search
+* Supports agent-driven change workflows
+* Provides visual diff control
+* Is architected for Monaco deployment later
+
+MVP Scope:
+
+* Single user
+* File-level apply
+* Stable graph
+* Stable semantic search
+* Stable diff engine
+
+No multi-user yet.
+No hunk-level patching yet.
+
+---
+
+If you'd like next, I can produce:
+
+• A visual architecture diagram
+• A file/folder structure blueprint
+• Or a phased milestone plan for implementation
+
+Your system is now architecturally coherent and product-ready.
