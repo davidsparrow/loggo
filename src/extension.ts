@@ -18,6 +18,7 @@ import { TextSearchService } from './services/TextSearchService';
 import { SemanticSearchService } from './services/SemanticSearchService';
 import { AgentService } from './services/AgentService';
 import { DiffViewProvider } from './webview/DiffViewProvider';
+import { McpConnectorPanel } from './webview/McpConnectorPanel';
 import { SearchMode } from './types/search';
 
 // ── Activate ──────────────────────────────────────────────
@@ -37,6 +38,7 @@ export function activate(context: vscode.ExtensionContext) {
   const semanticSearch = new SemanticSearchService(textSearch);
   const agentService = new AgentService();
   const diffViewProvider = new DiffViewProvider(context.extensionUri);
+  const mcpPanel = new McpConnectorPanel(context.extensionUri);
 
   // Try to initialise semantic engine (non-blocking)
   semanticSearch.initialize().then((ok) => {
@@ -100,6 +102,7 @@ export function activate(context: vscode.ExtensionContext) {
             const result = await analyzer.analyzeWorkspace(workspacePath);
             const graphData = await extractor.extractGraphData(analyzer, result);
             canvasProvider.updateGraph(graphData);
+            canvasProvider.updateBadgeCounts(mcpPanel.mcpCount, mcpPanel.connectorCount);
 
             // Populate Files panel
             const files = result.files.map(f => ({
@@ -117,6 +120,13 @@ export function activate(context: vscode.ExtensionContext) {
           }
         }
       );
+    })
+  );
+
+  // --- MCP & Connectors panel ---
+  context.subscriptions.push(
+    vscode.commands.registerCommand('logocode.openMcpConnectors', () => {
+      mcpPanel.show();
     })
   );
 

@@ -50,6 +50,9 @@ export class CodemapViewProvider {
             }
           }
           break;
+        case 'openMcpConnectors':
+          vscode.commands.executeCommand('logocode.openMcpConnectors');
+          break;
         case 'ready':
           if (this._graphData) {
             this.updateGraph(this._graphData);
@@ -70,6 +73,12 @@ export class CodemapViewProvider {
     const d3Data = transformToD3Format(graphData);
     console.log(`[LogoCode] Sending ${d3Data.nodes.length} nodes, ${d3Data.links.length} links to canvas`);
     this._panel.webview.postMessage({ type: 'updateGraph', data: d3Data });
+  }
+
+  /** Update MCP / Connector badge counts on the canvas header */
+  public updateBadgeCounts(mcpCount: number, connectorCount: number): void {
+    if (!this._panel) { return; }
+    this._panel.webview.postMessage({ type: 'updateBadges', mcpCount, connectorCount });
   }
 
   public dispose(): void {
@@ -104,6 +113,10 @@ export class CodemapViewProvider {
       <button id="btn-fit" title="Fit to view">⊡</button>
     </div>
     <div id="info-badge"></div>
+    <div id="header-badges">
+      <span id="mcp-badge" class="header-badge" title="MCP Servers">🔌 0</span>
+      <span id="connector-badge" class="header-badge" title="Connectors">🔗 0</span>
+    </div>
   </div>
   <script nonce="${nonce}" src="${d3Uri}"></script>
   <script nonce="${nonce}">${this._getJs()}</script>
@@ -208,6 +221,20 @@ svg { width: 100%; height: 100%; }
   font-size: 10px; opacity: 0.55;
 }
 
+/* ── Header badges (MCP / Connectors) ─────────────── */
+#header-badges {
+  position: absolute; top: 8px; right: 10px;
+  display: flex; gap: 6px;
+}
+.header-badge {
+  font-size: 10px; opacity: 0.55; cursor: pointer;
+  padding: 3px 8px; border-radius: 4px;
+  background: var(--vscode-badge-background, #4d4d4d);
+  color: var(--vscode-badge-foreground, #ccc);
+  user-select: none;
+}
+.header-badge:hover { opacity: 1; }
+
 /* ── Diff / hover helpers ──────────────────────────── */
 .is-highlight .card-bg { stroke: var(--vscode-focusBorder, #007fd4); stroke-width: 2; }
 .is-dim { opacity: 0.35; }
@@ -285,6 +312,14 @@ function initGraph() {
     svg.transition().duration(200).call(zoomBehavior.scaleBy, 0.7);
   });
   document.getElementById('btn-fit').addEventListener('click', fitToView);
+
+  // Header badge clicks → open MCP & Connectors panel
+  document.getElementById('mcp-badge').addEventListener('click', () => {
+    vscode.postMessage({ type: 'openMcpConnectors' });
+  });
+  document.getElementById('connector-badge').addEventListener('click', () => {
+    vscode.postMessage({ type: 'openMcpConnectors' });
+  });
 
   // Simulation
   simulation = d3.forceSimulation()
@@ -469,6 +504,10 @@ window.addEventListener('message', (event) => {
       break;
     case 'centerOnNode':
       centerOnNode(msg.nodeId);
+      break;
+    case 'updateBadges':
+      document.getElementById('mcp-badge').textContent = '🔌 ' + (msg.mcpCount || 0);
+      document.getElementById('connector-badge').textContent = '🔗 ' + (msg.connectorCount || 0);
       break;
   }
 });

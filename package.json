@@ -71,6 +71,11 @@
       {
         "command": "logocode.askAgent",
         "title": "Ask Agent About This"
+      },
+      {
+        "command": "logocode.openMcpConnectors",
+        "title": "LogoCode: MCP & Connectors",
+        "icon": "$(server)"
       }
     ],
     "menus": {
