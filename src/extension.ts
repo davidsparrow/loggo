@@ -16,6 +16,7 @@ import { TypeScriptAnalyzer } from './analyzer/TypeScriptAnalyzer';
 import { DependencyExtractor } from './analyzer/DependencyExtractor';
 import { TextSearchService } from './services/TextSearchService';
 import { SemanticSearchService } from './services/SemanticSearchService';
+import { AgentService } from './services/AgentService';
 import { SearchMode } from './types/search';
 
 // ── Activate ──────────────────────────────────────────────
@@ -33,6 +34,7 @@ export function activate(context: vscode.ExtensionContext) {
   const extractor = new DependencyExtractor();
   const textSearch = new TextSearchService();
   const semanticSearch = new SemanticSearchService(textSearch);
+  const agentService = new AgentService();
 
   // Try to initialise semantic engine (non-blocking)
   semanticSearch.initialize().then((ok) => {
@@ -155,8 +157,25 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showWarningMessage('Select text first.');
         return;
       }
-      // TODO (Chunk 5): Pass to agent orchestration
-      vscode.window.showInformationMessage(`Ask Agent: "${selected}" — coming in Chunk 5`);
+      // Add selection as context and trigger plan
+      chatProvider.addContext({
+        id: `editor-${Date.now()}`,
+        filePath: editor!.document.uri.fsPath,
+        line: editor!.selection.start.line + 1,
+        snippet: selected,
+        source: 'editor',
+        addedAt: Date.now(),
+      });
+      agentService.generatePlan(selected, [
+        {
+          id: `editor-${Date.now()}`,
+          filePath: editor!.document.uri.fsPath,
+          line: editor!.selection.start.line + 1,
+          snippet: selected,
+          source: 'editor',
+          addedAt: Date.now(),
+        },
+      ]);
     })
   );
 
@@ -202,6 +221,99 @@ export function activate(context: vscode.ExtensionContext) {
       ? { ...(preset.textOptions || {}) }
       : { ...(preset.semanticOptions || {}) };
     executeSearch(preset.mode, query, opts);
+  };
+
+  // ── Agent callbacks ──
+
+  agentService.callbacks = {
+    onPhaseChange: (phase) => {
+      chatProvider.addMessage({
+        id: `phase-${Date.now()}`,
+        role: 'system',
+        content: `Agent phase: ${phase}`,
+        timestamp: Date.now(),
+      });
+    },
+    onPlan: (plan) => {
+      const summary = plan.planSteps.map(s => `• ${s.description}`).join('\n');
+      chatProvider.addMessage({
+        id: `plan-${Date.now()}`,
+        role: 'agent',
+        content: `**Plan** (${plan.planSteps.length} steps)\n${summary}`,
+        timestamp: Date.now(),
+      });
+    },
+    onDiffResult: (_result) => {
+      chatProvider.addMessage({
+        id: `diff-${Date.now()}`,
+        role: 'agent',
+        content: 'Diff computed. Review files and click "Apply Selected" when ready.',
+        timestamp: Date.now(),
+      });
+    },
+    onApplyResult: (result) => {
+      chatProvider.addMessage({
+        id: `apply-${Date.now()}`,
+        role: 'agent',
+        content: result.error
+          ? `Apply error: ${result.error}`
+          : `Applied ${result.applied.length} file(s), skipped ${result.skipped.length}.`,
+        timestamp: Date.now(),
+      });
+    },
+    onMessage: (content) => {
+      chatProvider.addMessage({
+        id: `msg-${Date.now()}`,
+        role: 'agent',
+        content,
+        timestamp: Date.now(),
+      });
+    },
+    getGraphData: async () => {
+      const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!workspacePath) { return { nodes: [], edges: [] }; }
+      try {
+        const result = await analyzer.analyzeWorkspace(workspacePath);
+        return await extractor.extractGraphData(analyzer, result);
+      } catch {
+        return { nodes: [], edges: [] };
+      }
+    },
+  };
+
+  // ── Chat → Agent flow ──
+
+  chatProvider.onUserMessage = (text, ctx) => {
+    // Slash-commands for diff workflow
+    if (text.toLowerCase() === '/diff' || text.toLowerCase() === 'generate diff') {
+      agentService.generateDiff();
+      return;
+    }
+    if (text.toLowerCase() === '/apply' || text.toLowerCase() === 'apply selected') {
+      agentService.applyChanges();
+      return;
+    }
+    if (text.toLowerCase() === '/reset') {
+      agentService.reset();
+      chatProvider.addMessage({
+        id: `reset-${Date.now()}`, role: 'system',
+        content: 'Agent reset to idle.', timestamp: Date.now(),
+      });
+      return;
+    }
+    if (text.toLowerCase() === '/accept-all') {
+      const dm = agentService.diffMeta;
+      if (dm) { agentService.applyService.acceptAllTouched(dm); }
+      return;
+    }
+    if (text.toLowerCase() === '/accept-none') {
+      const dm = agentService.diffMeta;
+      if (dm) { agentService.applyService.acceptNone(dm); }
+      return;
+    }
+
+    // Default: generate a plan from user message + context
+    agentService.generatePlan(text, ctx);
   };
 
   // --- Language Model Tool registration ---
